@@ -1,0 +1,88 @@
+"""HTTP API for Indo-Pak Cricket Clash. Run with: uvicorn app.main:app --reload"""
+
+import os
+import random
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+from . import engine
+from .models import MatchState, NewMatchRequest, PlayRequest, TossRequest
+
+app = FastAPI(title="Indo-Pak Cricket Clash API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.environ.get("FRONTEND_ORIGINS", "http://localhost:3000").split(","),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Matches live in memory for now; they disappear when the server restarts.
+MATCHES: dict[str, MatchState] = {}
+rng = random.Random()
+
+
+def get_match(match_id: str) -> MatchState:
+    state = MATCHES.get(match_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Match not found")
+    return state
+
+
+def run_rule(action, *args) -> None:
+    try:
+        action(*args)
+    except engine.RuleError as err:
+        raise HTTPException(status_code=409, detail=str(err)) from err
+
+
+@app.get("/api/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.post("/api/matches")
+def create_match(body: NewMatchRequest) -> MatchState:
+    state = engine.new_match(body.user_team)
+    MATCHES[state.id] = state
+    return state
+
+
+@app.get("/api/matches/{match_id}")
+def read_match(match_id: str) -> MatchState:
+    return get_match(match_id)
+
+
+@app.post("/api/matches/{match_id}/toss")
+def toss(match_id: str, body: TossRequest) -> MatchState:
+    state = get_match(match_id)
+    run_rule(engine.do_toss, state, body.call, rng)
+    return state
+
+
+@app.post("/api/matches/{match_id}/delivery")
+def delivery(match_id: str) -> MatchState:
+    state = get_match(match_id)
+    run_rule(engine.next_delivery, state, rng)
+    return state
+
+
+@app.post("/api/matches/{match_id}/play")
+def play(match_id: str, body: PlayRequest) -> MatchState:
+    state = get_match(match_id)
+    run_rule(engine.play_ball, state, body.timing_ms, body.direction, rng)
+    return state
+
+
+@app.post("/api/matches/{match_id}/simulate")
+def simulate(match_id: str) -> MatchState:
+    state = get_match(match_id)
+    run_rule(engine.simulate_innings, state, rng)
+    return state
+
+
+@app.post("/api/matches/{match_id}/next-innings")
+def next_innings(match_id: str) -> MatchState:
+    state = get_match(match_id)
+    run_rule(engine.start_second_innings, state)
+    return state
