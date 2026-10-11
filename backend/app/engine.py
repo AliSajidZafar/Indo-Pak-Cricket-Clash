@@ -123,17 +123,25 @@ def next_delivery(state: MatchState, rng: random.Random) -> Delivery:
 # --- batting ------------------------------------------------------------------
 
 
+# Timing windows in ms either side of the perfect moment. Mirrored on the
+# frontend (lib/render.ts TIMING) so the on-screen meter matches these exactly.
+PERFECT_MS = 70
+GOOD_MS = 140
+MISTIMED_MS = 215
+EDGE_MS = 290
+
+
 def contact_from_timing(timing_ms: int | None) -> Contact:
     if timing_ms is None:
         return "none"
     error = abs(timing_ms)
-    if error <= 35:
+    if error <= PERFECT_MS:
         return "perfect"
-    if error <= 80:
+    if error <= GOOD_MS:
         return "good"
-    if error <= 140:
+    if error <= MISTIMED_MS:
         return "mistimed"
-    if error <= 200:
+    if error <= EDGE_MS:
         return "edge"
     return "none"
 
@@ -141,7 +149,7 @@ def contact_from_timing(timing_ms: int | None) -> Contact:
 def _computer_swing(delivery: Delivery, rng: random.Random) -> tuple[int | None, Direction]:
     if delivery.kind == "wide" and rng.random() < 0.7:
         return None, "straight"
-    timing = max(-300, min(160, round(rng.gauss(0, 115))))
+    timing = max(-340, min(200, round(rng.gauss(0, 150))))
     direction: Direction = rng.choices(["leg", "straight", "off"], weights=[40, 25, 35])[0]
     return timing, direction
 
