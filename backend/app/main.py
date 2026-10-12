@@ -16,9 +16,16 @@ from .db import fetch_stats
 from .models import MatchState, NewMatchRequest, PlayRequest, TossRequest
 
 app = FastAPI(title="Indo-Pak Cricket Clash API")
+
+# CORS: trust the configured origins, and — as a safety net — any Railway app
+# domain, so the deployed frontend works even if FRONTEND_ORIGINS is slightly off
+# (wrong scheme, trailing slash, stray spaces). No cookies/credentials are used.
+_origins = [o.strip() for o in os.environ.get("FRONTEND_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
+_allow_all = "*" in _origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.environ.get("FRONTEND_ORIGINS", "http://localhost:3000").split(","),
+    allow_origins=["*"] if _allow_all else _origins,
+    allow_origin_regex=None if _allow_all else r"https://.*\.up\.railway\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )
