@@ -1,0 +1,10 @@
+# Secrets & local credential notes — NEVER commit these
+Railway Credentials.txt
+*credentials*.txt
+*Credentials*.txt
+.env
+.env.local
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
