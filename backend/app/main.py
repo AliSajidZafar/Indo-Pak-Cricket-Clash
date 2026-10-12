@@ -2,11 +2,17 @@
 
 import os
 import random
+from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+# Load backend/.env explicitly (robust regardless of the working directory).
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
 from . import engine
+from .db import fetch_stats
 from .models import MatchState, NewMatchRequest, PlayRequest, TossRequest
 
 app = FastAPI(title="Indo-Pak Cricket Clash API")
@@ -39,6 +45,15 @@ def run_rule(action, *args) -> None:
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/stats")
+def stats() -> dict:
+    """Career batting and bowling stats across all finished matches."""
+    data = fetch_stats()
+    if data is None:
+        raise HTTPException(status_code=503, detail="Stats are not configured yet.")
+    return data
 
 
 @app.post("/api/matches")

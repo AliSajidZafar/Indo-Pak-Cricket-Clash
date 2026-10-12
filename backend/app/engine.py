@@ -496,7 +496,13 @@ def _finish_innings(state: MatchState, inn: Innings) -> None:
 
 
 def on_match_finished(state: MatchState) -> None:
-    """Hook for saving finished matches (e.g. to Supabase) in a later version."""
+    """Persist the finished match's stats (best-effort; never raises)."""
+    try:
+        from .db import save_match
+
+        save_match(state)
+    except Exception as err:
+        print("on_match_finished error:", err)
 
 
 def simulate_innings(state: MatchState, rng: random.Random) -> None:
