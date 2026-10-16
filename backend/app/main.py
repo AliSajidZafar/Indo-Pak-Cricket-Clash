@@ -49,9 +49,13 @@ def run_rule(action, *args) -> None:
         raise HTTPException(status_code=409, detail=str(err)) from err
 
 
+# Bump this on each deploy so /api/health confirms the live build.
+VERSION = "2026.10.16.1"
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "version": VERSION}
 
 
 @app.get("/api/stats")
