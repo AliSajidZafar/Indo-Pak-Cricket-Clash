@@ -8,3 +8,6 @@ Railway Credentials.txt
 # OS / editor junk
 .DS_Store
 Thumbs.db
+
+# Local tool logs
+.deep-copilot/
