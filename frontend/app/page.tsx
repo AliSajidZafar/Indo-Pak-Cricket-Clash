@@ -87,18 +87,18 @@ export default function Page() {
         while (!cancelled) {
           const inn = currentInnings(state);
           if (!inn || inn.complete || inn.batting === state.user_team) break;
-          const d = await run(() => api.delivery(state.id));
+          await run(() => api.delivery(state.id));
           if (cancelled) break;
-          await stadium.current?.bowl(d.pending_delivery!);
           const next = await run(() => api.play(state.id, null, "straight"));
           if (cancelled) break;
           if (next.last_ball) {
-            await stadium.current?.showResult(next.last_ball);
+            // The outcome is known; play the whole ball (run-up → shot → result).
+            await stadium.current?.replay(next.last_ball);
             setResultSeq((s) => s + 1);
           }
           state = next;
           setMatch(next);
-          await new Promise((r) => setTimeout(r, 450));
+          await new Promise((r) => setTimeout(r, 350));
         }
       } catch {
         /* surfaced via setError */

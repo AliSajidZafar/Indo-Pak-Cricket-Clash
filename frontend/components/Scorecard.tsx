@@ -104,9 +104,14 @@ export default function Scorecard({ match, innings }: { match: MatchState; innin
 
         {/* Bowler + extras */}
         <div className="flex min-w-[150px] flex-col justify-center gap-1 rounded-lg bg-black/20 px-3 py-1.5 text-sm">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-white/60">Bowler</span>
-            <span className="font-medium text-white/90">{surname(bowler?.name ?? "")}</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-white/60">
+              <Flag team={innings.bowling} className="h-3.5 w-5" />
+              Bowler
+            </span>
+            <span className="flex-1 truncate text-right font-medium text-white/90">
+              {surname(bowler?.name ?? "")}
+            </span>
             <span className="font-mono text-white/70">{bowler ? bowlerFigures(bowler) : ""}</span>
           </div>
           <div className="flex items-center justify-between gap-3">
