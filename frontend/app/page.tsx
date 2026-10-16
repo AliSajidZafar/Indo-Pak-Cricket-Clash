@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import Banner from "@/components/Banner";
 import Flag from "@/components/Flag";
+import HeroScene from "@/components/HeroScene";
+import PauseMenu from "@/components/PauseMenu";
 import Scorecard from "@/components/Scorecard";
 import Stadium, { type StadiumHandle } from "@/components/Stadium";
 import { ApiError, api } from "@/lib/api";
@@ -23,16 +25,22 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultSeq, setResultSeq] = useState(0);
+  const [paused, setPaused] = useState(false);
 
   const stadium = useRef<StadiumHandle>(null);
   const aimRef = useRef<Direction>(aim);
   const matchRef = useRef<MatchState | null>(match);
+  const pausedRef = useRef(false);
+  const skipRef = useRef(false); // ask the computer-innings loop to fast-forward
   useEffect(() => {
     aimRef.current = aim;
   }, [aim]);
   useEffect(() => {
     matchRef.current = match;
   }, [match]);
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   const run = useCallback(async (fn: () => Promise<MatchState>) => {
     try {
@@ -63,6 +71,54 @@ export default function Page() {
     }
   }, [match, run]);
 
+  // Fast-forward the rest of the opponent's innings (the engine won't skip your
+  // own). While the computer bats, the auto-loop performs the skip so there's no
+  // race over match state.
+  const skipInnings = useCallback(() => {
+    const m = matchRef.current;
+    const inn = m ? currentInnings(m) : null;
+    if (!m || !inn || inn.complete || inn.batting === m.user_team) return;
+    setPaused(false);
+    skipRef.current = true;
+  }, []);
+
+  // Restart: a fresh match with the same team, back to the toss.
+  const restart = useCallback(() => {
+    const m = matchRef.current;
+    if (!m) return;
+    setPaused(false);
+    skipRef.current = false;
+    setError(null);
+    setBusy(true);
+    run(() => api.createMatch(m.user_team))
+      .then((fresh) => {
+        setMatch(fresh);
+        setResultSeq(0);
+      })
+      .finally(() => setBusy(false));
+  }, [run]);
+
+  // Quit back to the main menu.
+  const quit = useCallback(() => {
+    setPaused(false);
+    skipRef.current = false;
+    setMatch(null);
+    setError(null);
+  }, []);
+
+  // Esc toggles the pause menu, but only during live play. (Every way out of the
+  // menu — resume, skip, restart, quit — clears `paused`, so it never leaks into
+  // another phase.)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const m = matchRef.current;
+      if (m && (m.phase === "innings1" || m.phase === "innings2")) setPaused((p) => !p);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // A key that stays constant for the whole of a computer innings, so the
   // auto-play effect below runs exactly once per such innings (and not again
   // every time we setMatch after a ball).
@@ -87,6 +143,20 @@ export default function Page() {
         while (!cancelled) {
           const inn = currentInnings(state);
           if (!inn || inn.complete || inn.batting === state.user_team) break;
+          // Skip: fast-forward the rest of this (opponent's) innings at once.
+          if (skipRef.current) {
+            skipRef.current = false;
+            const done = await run(() => api.simulate(state.id));
+            if (cancelled) break;
+            state = done;
+            setMatch(done);
+            break;
+          }
+          // Pause: hold here until resumed (or skipped, or cancelled).
+          if (pausedRef.current) {
+            await new Promise((r) => setTimeout(r, 150));
+            continue;
+          }
           await run(() => api.delivery(state.id));
           if (cancelled) break;
           const next = await run(() => api.play(state.id, null, "straight"));
@@ -94,6 +164,7 @@ export default function Page() {
           if (next.last_ball) {
             // The outcome is known; play the whole ball (run-up → shot → result).
             await stadium.current?.replay(next.last_ball);
+            if (cancelled) break; // a restart/quit may have landed during the replay
             setResultSeq((s) => s + 1);
           }
           state = next;
@@ -128,6 +199,8 @@ export default function Page() {
   if (!match) return <StartScreen onStart={(t) => run(() => api.createMatch(t)).then(setMatch)} error={error} />;
 
   const inn = currentInnings(match);
+  const inPlay = match.phase === "innings1" || match.phase === "innings2";
+  const opponentBatting = !!inn && !inn.complete && inn.batting !== match.user_team;
 
   return (
     <main className="mx-auto flex h-[100dvh] w-full max-w-5xl flex-col gap-2 px-3 py-2 sm:px-4 sm:py-3">
@@ -143,15 +216,42 @@ export default function Page() {
       </header>
 
       <div className="relative min-h-0 flex-1">
-        {/* interactive follows only whose innings it is — NOT `busy`, which is
-            true for the whole delivery and would disable the swing mid-ball. */}
-        <Stadium ref={stadium} match={match} aim={aim} interactive={!!userBatting} />
+        {/* interactive follows whose innings it is (and is off while paused) —
+            NOT `busy`, which is true for the whole delivery and would disable
+            the swing mid-ball. */}
+        <Stadium ref={stadium} match={match} aim={aim} interactive={!!userBatting && !paused} />
         <Banner result={match.last_ball} seq={resultSeq} />
         {match.free_hit && match.phase !== "finished" && (
           <span className="absolute left-3 top-3 z-10 animate-pulse rounded-full bg-fuchsia-600 px-3 py-1 text-xs font-bold text-white shadow-lg">
             FREE HIT
           </span>
         )}
+        {inPlay && !paused && (
+          <button
+            onClick={() => setPaused(true)}
+            aria-label="Pause"
+            className="absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full bg-black/45 px-3 py-1.5 text-xs font-semibold text-white ring-1 ring-white/20 backdrop-blur transition hover:bg-black/70"
+          >
+            <span className="text-sm leading-none">❚❚</span> Pause
+          </button>
+        )}
+        {inPlay && opponentBatting && !paused && (
+          <button
+            onClick={skipInnings}
+            className="absolute bottom-3 right-3 z-10 flex items-center gap-1.5 rounded-full bg-amber-500/90 px-3 py-1.5 text-xs font-bold text-black ring-1 ring-black/10 backdrop-blur transition hover:bg-amber-400"
+          >
+            Skip innings ▶▶
+          </button>
+        )}
+        <PauseMenu
+          open={paused}
+          match={match}
+          canSkip={opponentBatting}
+          onResume={() => setPaused(false)}
+          onSkip={skipInnings}
+          onRestart={restart}
+          onQuit={quit}
+        />
       </div>
 
       {inn && match.phase !== "finished" && (
@@ -330,35 +430,62 @@ function Panel({ children }: { children: React.ReactNode }) {
 
 function StartScreen({ onStart, error }: { onStart: (t: TeamCode) => void; error: string | null }) {
   return (
-    <main className="mx-auto flex min-h-full max-w-xl flex-col items-center justify-center gap-8 px-4 py-16 text-center">
-      <div>
-        <h1 className="text-4xl font-black tracking-tight text-white sm:text-5xl">
-          Indo-Pak <span className="text-amber-400">Cricket Clash</span>
-        </h1>
-        <p className="mt-2 text-white/60">The arch-rivals, 5 overs a side. Pick your team.</p>
+    <main className="relative mx-auto flex h-[100dvh] w-full max-w-5xl flex-col overflow-hidden">
+      {/* Cinematic looping hero behind everything. */}
+      <div className="absolute inset-0 -z-10 overflow-hidden">
+        <HeroScene className="h-full w-full scale-[1.12] object-cover [object-position:50%_44%]" />
+        {/* Scrims: darken top and bottom so the title and buttons read clearly. */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#060b22]/85 via-transparent to-[#060b22]/95" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#060b22] via-transparent to-transparent" />
       </div>
-      <div className="grid w-full grid-cols-2 gap-4">
-        {(["IND", "PAK"] as TeamCode[]).map((t) => {
-          const s = TEAM_STYLE[t];
-          return (
-            <button
-              key={t}
-              onClick={() => onStart(t)}
-              className={`group flex flex-col items-center gap-3 rounded-2xl ${s.bg} p-6 text-white shadow-xl ring-2 ring-transparent transition hover:scale-[1.03]`}
-            >
-              <Flag team={t} className="h-16 w-24 shadow-lg transition group-hover:scale-110" />
-              <span className="text-lg font-bold">{t === "IND" ? "India" : "Pakistan"}</span>
-            </button>
-          );
-        })}
+
+      <div className="flex flex-1 flex-col items-center justify-between px-4 py-6 text-center sm:py-10">
+        <div className="animate-[pop_0.5s_ease-out]">
+          <div className="mb-2 flex items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-amber-300/90">
+            <span className="h-px w-6 bg-amber-300/50" />
+            The Arch-Rivals · T20
+            <span className="h-px w-6 bg-amber-300/50" />
+          </div>
+          <h1 className="text-4xl font-black leading-none tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] sm:text-6xl">
+            Indo-Pak{" "}
+            <span className="bg-gradient-to-r from-amber-300 via-orange-400 to-amber-500 bg-clip-text text-transparent">
+              Cricket Clash
+            </span>
+          </h1>
+          <p className="mt-3 text-sm text-white/70 sm:text-base">
+            India vs Pakistan · 5 overs a side · winner of the toss bats first
+          </p>
+        </div>
+
+        <div className="w-full max-w-md">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/60">
+            Choose your team
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            {(["IND", "PAK"] as TeamCode[]).map((t) => {
+              const s = TEAM_STYLE[t];
+              return (
+                <button
+                  key={t}
+                  onClick={() => onStart(t)}
+                  className={`group relative flex flex-col items-center gap-3 overflow-hidden rounded-2xl ${s.bg} p-5 text-white shadow-2xl ring-1 ring-white/20 transition hover:scale-[1.04] hover:ring-white/50`}
+                >
+                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/15 to-transparent" />
+                  <Flag team={t} className="h-16 w-24 shadow-lg ring-1 ring-black/30 transition group-hover:scale-110" />
+                  <span className="text-lg font-bold">{t === "IND" ? "India" : "Pakistan"}</span>
+                </button>
+              );
+            })}
+          </div>
+          <Link
+            href="/stats"
+            className="mt-4 inline-block rounded-full bg-white/10 px-5 py-2 text-sm font-medium text-white/80 backdrop-blur transition hover:bg-white/20"
+          >
+            📊 View career stats
+          </Link>
+          {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
+        </div>
       </div>
-      <Link
-        href="/stats"
-        className="rounded-full bg-white/10 px-5 py-2 text-sm font-medium text-white/80 transition hover:bg-white/20"
-      >
-        📊 View career stats
-      </Link>
-      {error && <p className="text-sm text-red-300">{error}</p>}
     </main>
   );
 }
