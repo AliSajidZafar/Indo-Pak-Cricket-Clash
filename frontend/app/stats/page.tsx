@@ -14,7 +14,7 @@ const fmt = (v: number | string | null, dp = 2) =>
 function TeamCell({ team }: { team: TeamCode }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <Flag team={team} className="h-3.5 w-5" />
+      <Flag team={team} className="h-4 w-6" />
       <span className="text-white/50">{team}</span>
     </span>
   );

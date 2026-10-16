@@ -346,7 +346,7 @@ function StartScreen({ onStart, error }: { onStart: (t: TeamCode) => void; error
               onClick={() => onStart(t)}
               className={`group flex flex-col items-center gap-3 rounded-2xl ${s.bg} p-6 text-white shadow-xl ring-2 ring-transparent transition hover:scale-[1.03]`}
             >
-              <Flag team={t} className="h-12 w-20 transition group-hover:scale-110" />
+              <Flag team={t} className="h-16 w-24 shadow-lg transition group-hover:scale-110" />
               <span className="text-lg font-bold">{t === "IND" ? "India" : "Pakistan"}</span>
             </button>
           );
