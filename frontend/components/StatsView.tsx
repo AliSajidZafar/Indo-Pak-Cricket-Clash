@@ -11,18 +11,9 @@ const fmt = (v: number | string | null, dp = 2) =>
 
 const TEAM_NAME: Record<TeamCode, string> = { IND: "India", PAK: "Pakistan" };
 
-// The best milestone a batter has reached, from their highest score.
-function milestone(hs: number): { label: string; cls: string } | null {
-  if (hs >= 100) return { label: "100", cls: "bg-amber-400 text-black" };
-  if (hs >= 50) return { label: "50", cls: "bg-amber-500/30 text-amber-200 ring-1 ring-amber-400/50" };
-  if (hs >= 30) return { label: "30", cls: "bg-blue-500/25 text-blue-200 ring-1 ring-blue-400/40" };
-  return null;
-}
-
-function MilestoneBadge({ hs }: { hs: number }) {
-  const m = milestone(hs);
-  if (!m) return <span className="text-white/25">—</span>;
-  return <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-bold ${m.cls}`}>{m.label}</span>;
+// A count that fades to grey when it's zero, so real milestones stand out.
+function Count({ n, cls = "text-white/90" }: { n: number; cls?: string }) {
+  return <span className={n > 0 ? cls : "text-white/25"}>{n}</span>;
 }
 
 function TeamCell({ team }: { team: TeamCode }) {
@@ -126,7 +117,8 @@ export default function StatsView({ data }: { data: StatsResponse }) {
               <Th right>Inns</Th>
               <Th right>Runs</Th>
               <Th right>HS</Th>
-              <Th right>50/100</Th>
+              <Th right>30s/50s</Th>
+              <Th right>100s</Th>
               <Th right>Avg</Th>
               <Th right>SR</Th>
             </tr>
@@ -142,7 +134,12 @@ export default function StatsView({ data }: { data: StatsResponse }) {
                 <Td right>{b.runs}</Td>
                 <Td right>{b.high_score}</Td>
                 <Td right>
-                  <MilestoneBadge hs={b.high_score} />
+                  <Count n={b.thirties ?? 0} cls="text-blue-200" />
+                  <span className="text-white/30">/</span>
+                  <Count n={b.fifties ?? 0} cls="text-amber-200" />
+                </Td>
+                <Td right>
+                  <Count n={b.hundreds ?? 0} cls="text-amber-300 font-bold" />
                 </Td>
                 <Td right>{fmt(b.average)}</Td>
                 <Td right>{fmt(b.strike_rate)}</Td>

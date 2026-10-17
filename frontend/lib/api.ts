@@ -49,6 +49,9 @@ export interface BattingStat {
   dismissals: number;
   average: Num;
   strike_rate: Num;
+  thirties?: number;
+  fifties?: number;
+  hundreds?: number;
 }
 
 export interface BowlingStat {

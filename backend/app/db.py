@@ -101,6 +101,22 @@ def _team_totals(batting_rows: list[dict]) -> dict[str, dict]:
     return teams
 
 
+def _player_milestones(batting_rows: list[dict]) -> dict[tuple, dict]:
+    """Per (player, team): how many 30s (30–49), 50s (50–99) and 100s they've made."""
+    out: dict[tuple, dict] = {}
+    for r in batting_rows:
+        key = (r.get("player"), r.get("team"))
+        m = out.setdefault(key, {"thirties": 0, "fifties": 0, "hundreds": 0})
+        runs = r.get("runs") or 0
+        if runs >= 100:
+            m["hundreds"] += 1
+        elif runs >= 50:
+            m["fifties"] += 1
+        elif runs >= 30:
+            m["thirties"] += 1
+    return out
+
+
 def _head_to_head(match_rows: list[dict]) -> dict:
     """Count match wins per team (winner is a team code, or null for a tie)."""
     h2h = {"IND": 0, "PAK": 0, "ties": 0, "matches": len(match_rows)}
@@ -129,14 +145,23 @@ def fetch_stats() -> dict | None:
             .execute()
             .data
         )
-        # Raw rows for team milestones and the head-to-head record. (Aggregated in
-        # Python so no extra SQL views are needed; fine at this scale.)
-        innings_rows = client.table("batting_innings").select("team,runs,fours,sixes").execute().data
+        # Raw rows for team totals, per-player milestones and the head-to-head
+        # record. (Aggregated in Python so no extra SQL views are needed.)
+        innings_rows = (
+            client.table("batting_innings").select("player,team,runs,fours,sixes").execute().data
+        )
         match_rows = client.table("matches").select("winner").execute().data
         teams = _team_totals(innings_rows)
         h2h = _head_to_head(match_rows)
         for code in ("IND", "PAK"):
             teams[code]["wins"] = h2h[code]
+        # Attach each player's 30s/50s/100s onto their career batting row.
+        milestones = _player_milestones(innings_rows)
+        for b in batting:
+            m = milestones.get((b.get("player"), b.get("team")), {"thirties": 0, "fifties": 0, "hundreds": 0})
+            b["thirties"] = m["thirties"]
+            b["fifties"] = m["fifties"]
+            b["hundreds"] = m["hundreds"]
         return {
             "batting": batting,
             "bowling": bowling,
