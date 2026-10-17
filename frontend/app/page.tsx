@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import Banner from "@/components/Banner";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import Flag from "@/components/Flag";
 import HeroScene from "@/components/HeroScene";
 import PauseMenu from "@/components/PauseMenu";
@@ -26,6 +27,7 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [resultSeq, setResultSeq] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [confirmingSkip, setConfirmingSkip] = useState(false);
 
   const stadium = useRef<StadiumHandle>(null);
   const aimRef = useRef<Direction>(aim);
@@ -74,7 +76,11 @@ export default function Page() {
   // Fast-forward the rest of the opponent's innings (the engine won't skip your
   // own). While the computer bats, the auto-loop performs the skip so there's no
   // race over match state.
+  // Open the confirmation first; the actual skip runs only on "Yes".
+  const requestSkip = useCallback(() => setConfirmingSkip(true), []);
+
   const skipInnings = useCallback(() => {
+    setConfirmingSkip(false);
     const m = matchRef.current;
     const inn = m ? currentInnings(m) : null;
     if (!m || !inn || inn.complete || inn.batting === m.user_team) return;
@@ -87,6 +93,7 @@ export default function Page() {
     const m = matchRef.current;
     if (!m) return;
     setPaused(false);
+    setConfirmingSkip(false);
     skipRef.current = false;
     setError(null);
     setBusy(true);
@@ -101,6 +108,7 @@ export default function Page() {
   // Quit back to the main menu.
   const quit = useCallback(() => {
     setPaused(false);
+    setConfirmingSkip(false);
     skipRef.current = false;
     setMatch(null);
     setError(null);
@@ -237,7 +245,7 @@ export default function Page() {
         )}
         {inPlay && opponentBatting && !paused && (
           <button
-            onClick={skipInnings}
+            onClick={requestSkip}
             className="absolute bottom-3 right-3 z-10 flex items-center gap-1.5 rounded-full bg-amber-500/90 px-3 py-1.5 text-xs font-bold text-black ring-1 ring-black/10 backdrop-blur transition hover:bg-amber-400"
           >
             Skip innings ▶▶
@@ -248,9 +256,18 @@ export default function Page() {
           match={match}
           canSkip={opponentBatting}
           onResume={() => setPaused(false)}
-          onSkip={skipInnings}
+          onSkip={requestSkip}
           onRestart={restart}
           onQuit={quit}
+        />
+        <ConfirmDialog
+          open={confirmingSkip}
+          title="Skip the innings?"
+          message="Fast-forward the rest of the opponent's innings to the result. You can't undo this."
+          confirmLabel="Yes, skip"
+          cancelLabel="No, keep watching"
+          onConfirm={skipInnings}
+          onCancel={() => setConfirmingSkip(false)}
         />
       </div>
 
@@ -429,6 +446,7 @@ function Panel({ children }: { children: React.ReactNode }) {
 }
 
 function StartScreen({ onStart, error }: { onStart: (t: TeamCode) => void; error: string | null }) {
+  const [view, setView] = useState<"menu" | "team">("menu");
   return (
     <main className="relative mx-auto flex h-[100dvh] w-full max-w-5xl flex-col overflow-hidden">
       {/* Cinematic looping hero behind everything. */}
@@ -443,7 +461,7 @@ function StartScreen({ onStart, error }: { onStart: (t: TeamCode) => void; error
         <div className="animate-[pop_0.5s_ease-out]">
           <div className="mb-2 flex items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-amber-300/90">
             <span className="h-px w-6 bg-amber-300/50" />
-            The Arch-Rivals · T20
+            The Arch-Rivals · 5 Overs
             <span className="h-px w-6 bg-amber-300/50" />
           </div>
           <h1 className="text-4xl font-black leading-none tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] sm:text-6xl">
@@ -457,35 +475,79 @@ function StartScreen({ onStart, error }: { onStart: (t: TeamCode) => void; error
           </p>
         </div>
 
-        <div className="w-full max-w-md">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/60">
-            Choose your team
-          </p>
-          <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            {(["IND", "PAK"] as TeamCode[]).map((t) => {
-              const s = TEAM_STYLE[t];
-              return (
-                <button
-                  key={t}
-                  onClick={() => onStart(t)}
-                  className={`group relative flex flex-col items-center gap-3 overflow-hidden rounded-2xl ${s.bg} p-5 text-white shadow-2xl ring-1 ring-white/20 transition hover:scale-[1.04] hover:ring-white/50`}
-                >
-                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/15 to-transparent" />
-                  <Flag team={t} className="h-16 w-24 shadow-lg ring-1 ring-black/30 transition group-hover:scale-110" />
-                  <span className="text-lg font-bold">{t === "IND" ? "India" : "Pakistan"}</span>
-                </button>
-              );
-            })}
-          </div>
-          <Link
-            href="/stats"
-            className="mt-4 inline-block rounded-full bg-white/10 px-5 py-2 text-sm font-medium text-white/80 backdrop-blur transition hover:bg-white/20"
-          >
-            📊 View career stats
-          </Link>
-          {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
-        </div>
+        {view === "menu" ? (
+          <MainMenu onPlay={() => setView("team")} />
+        ) : (
+          <TeamSelect onStart={onStart} onBack={() => setView("menu")} error={error} />
+        )}
       </div>
     </main>
+  );
+}
+
+function MainMenu({ onPlay }: { onPlay: () => void }) {
+  return (
+    <div className="flex w-full max-w-sm animate-[pop_0.3s_ease-out] flex-col gap-3">
+      <button
+        onClick={onPlay}
+        className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 px-6 py-4 text-xl font-black text-black shadow-2xl ring-1 ring-white/30 transition hover:scale-[1.03]"
+      >
+        <span className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/30 to-transparent" />
+        ▶ PLAY
+      </button>
+      <div className="grid grid-cols-2 gap-3">
+        <Link
+          href="/achievements"
+          className="rounded-xl bg-white/10 px-4 py-3 font-semibold text-white backdrop-blur transition hover:bg-white/20"
+        >
+          🏅 Achievements
+        </Link>
+        <Link
+          href="/stats"
+          className="rounded-xl bg-white/10 px-4 py-3 font-semibold text-white backdrop-blur transition hover:bg-white/20"
+        >
+          📊 Career Stats
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function TeamSelect({
+  onStart,
+  onBack,
+  error,
+}: {
+  onStart: (t: TeamCode) => void;
+  onBack: () => void;
+  error: string | null;
+}) {
+  return (
+    <div className="w-full max-w-md animate-[pop_0.3s_ease-out]">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/60">Choose your team</p>
+      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+        {(["IND", "PAK"] as TeamCode[]).map((t) => {
+          const s = TEAM_STYLE[t];
+          return (
+            <button
+              key={t}
+              onClick={() => onStart(t)}
+              className={`group relative flex flex-col items-center gap-3 overflow-hidden rounded-2xl ${s.bg} p-5 text-white shadow-2xl ring-1 ring-white/20 transition hover:scale-[1.04] hover:ring-white/50`}
+            >
+              <span className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/15 to-transparent" />
+              <Flag team={t} className="h-16 w-24 shadow-lg ring-1 ring-black/30 transition group-hover:scale-110" />
+              <span className="text-lg font-bold">{t === "IND" ? "India" : "Pakistan"}</span>
+            </button>
+          );
+        })}
+      </div>
+      <button
+        onClick={onBack}
+        className="mt-4 inline-block rounded-full bg-white/10 px-5 py-2 text-sm font-medium text-white/80 backdrop-blur transition hover:bg-white/20"
+      >
+        ← Back
+      </button>
+      {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
+    </div>
   );
 }

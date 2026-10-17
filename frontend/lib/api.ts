@@ -60,9 +60,29 @@ export interface BowlingStat {
   strike_rate: Num;
 }
 
+export interface TeamStat {
+  team: TeamCode;
+  runs: number;
+  thirties: number;
+  fifties: number;
+  hundreds: number;
+  fours: number;
+  sixes: number;
+  wins: number;
+}
+
+export interface HeadToHead {
+  IND: number;
+  PAK: number;
+  ties: number;
+  matches: number;
+}
+
 export interface StatsResponse {
   batting: BattingStat[];
   bowling: BowlingStat[];
+  teams?: TeamStat[];
+  head_to_head?: HeadToHead;
 }
 
 export async function getStats(): Promise<StatsResponse> {

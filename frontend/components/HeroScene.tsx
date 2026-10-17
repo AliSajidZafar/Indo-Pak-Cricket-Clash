@@ -199,7 +199,7 @@ export default function HeroScene({ className = "" }: { className?: string }) {
       ctx.drawImage(backdrop, 0, 0, DESIGN_W, DESIGN_H);
       drawBigScreen(
         ctx,
-        { top: "T20 CLASH · THE ARCH-RIVALS", main: "IND v PAK", accent: "#22d3ee", flash: big },
+        { top: "5-OVER CLASH · THE ARCH-RIVALS", main: "IND v PAK", accent: "#22d3ee", flash: big },
         performance.now(),
       );
       drawFlashes(ctx, performance.now(), big ? 1 : 0.15);

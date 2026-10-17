@@ -629,7 +629,7 @@ const Stadium = forwardRef<StadiumHandle, Props>(function Stadium({ match, aim, 
         ctx,
         inn
           ? { top: `${team}  ·  ${overs(inn.legal_balls)} OV`, main: `${inn.runs}/${inn.wickets}`, accent: flash?.color ?? "#fff", flash: flash?.text ?? null }
-          : { top: "T20 · 5 OVERS", main: "IND v PAK", accent: "#fff", flash: null },
+          : { top: "5-OVER CLASH", main: "IND v PAK", accent: "#fff", flash: null },
         t,
       );
       drawFlashes(ctx, t, flash?.roar ? 1 : 0);

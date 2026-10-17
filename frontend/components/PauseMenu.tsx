@@ -1,8 +1,11 @@
+import { useState } from "react";
+
 import Flag from "@/components/Flag";
+import StatsOverlay from "@/components/StatsOverlay";
 import { currentInnings, overs } from "@/lib/cricket";
 import type { MatchState } from "@/types/match";
 
-/** The in-game pause overlay: resume, auto-play the opponent's innings, restart or quit. */
+/** The in-game pause overlay: resume, auto-play the opponent's innings, view stats, restart or quit. */
 export default function PauseMenu({
   open,
   match,
@@ -20,6 +23,7 @@ export default function PauseMenu({
   onRestart: () => void;
   onQuit: () => void;
 }) {
+  const [showStats, setShowStats] = useState(false);
   if (!open) return null;
   const inn = currentInnings(match);
 
@@ -56,6 +60,13 @@ export default function PauseMenu({
           )}
 
           <button
+            onClick={() => setShowStats(true)}
+            className="w-full rounded-lg bg-white/10 px-4 py-3 font-semibold text-white transition hover:bg-white/20"
+          >
+            📊 View stats
+          </button>
+
+          <button
             onClick={onRestart}
             className="w-full rounded-lg bg-white/10 px-4 py-3 font-semibold text-white transition hover:bg-white/20"
           >
@@ -72,6 +83,8 @@ export default function PauseMenu({
 
         <p className="mt-3 text-[11px] text-white/40">Press Esc to resume</p>
       </div>
+
+      {showStats && <StatsOverlay onClose={() => setShowStats(false)} />}
     </div>
   );
 }
