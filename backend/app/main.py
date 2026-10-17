@@ -13,7 +13,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from . import engine
 from .db import fetch_stats
-from .models import MatchState, NewMatchRequest, PlayRequest, TossRequest
+from .models import ElectRequest, MatchState, NewMatchRequest, PlayRequest, TossRequest
 
 app = FastAPI(title="Indo-Pak Cricket Clash API")
 
@@ -83,6 +83,20 @@ def read_match(match_id: str) -> MatchState:
 def toss(match_id: str, body: TossRequest) -> MatchState:
     state = get_match(match_id)
     run_rule(engine.do_toss, state, body.call, rng)
+    return state
+
+
+@app.post("/api/matches/{match_id}/elect")
+def elect(match_id: str, body: ElectRequest) -> MatchState:
+    state = get_match(match_id)
+    run_rule(engine.elect_toss, state, body.decision)
+    return state
+
+
+@app.post("/api/matches/{match_id}/start")
+def start(match_id: str) -> MatchState:
+    state = get_match(match_id)
+    run_rule(engine.start_match, state)
     return state
 
 

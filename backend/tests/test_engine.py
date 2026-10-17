@@ -5,10 +5,19 @@ import pytest
 from app import engine
 
 
+def settle_toss(state, decision="bat"):
+    """Carry the toss through to the start of the first innings, whoever won."""
+    if state.phase == "elect":
+        engine.elect_toss(state, decision)
+    elif state.phase == "toss_result":
+        engine.start_match(state)
+
+
 def play_full_match(seed: int, user_team="IND"):
     rng = random.Random(seed)
     state = engine.new_match(user_team)
     engine.do_toss(state, "heads", rng)
+    settle_toss(state)
     for _ in range(2):
         inn = state.innings[-1]
         while not inn.complete:
@@ -20,13 +29,43 @@ def play_full_match(seed: int, user_team="IND"):
     return state
 
 
-def test_toss_winner_bats_first():
-    for seed in range(20):
+def test_toss_winner_elects_and_sits_who_bats():
+    """Official toss: the winner elects; batting-first follows the choice."""
+    for seed in range(40):
         state = engine.new_match("PAK")
         engine.do_toss(state, "tails", random.Random(seed))
-        assert state.toss.batting_first == state.toss.winner
-        assert state.innings[0].batting == state.toss.winner
+        if state.toss.winner == "PAK":
+            # The user won → must be asked to choose; nothing has started yet.
+            assert state.phase == "elect"
+            assert state.innings == []
+            engine.elect_toss(state, "bowl")
+            assert state.toss.choice == "bowl"
+            assert state.toss.batting_first == "IND"  # elected to bowl → other side bats
+        else:
+            # The computer won → it has already elected; the user just starts.
+            assert state.phase == "toss_result"
+            assert state.toss.choice in ("bat", "bowl")
+            assert state.innings == []
+            engine.start_match(state)
         assert state.phase == "innings1"
+        assert state.innings[0].batting == state.toss.batting_first
+        # Whoever elected to bat bats first; electing to bowl sends the other side in.
+        chose = state.toss.winner
+        if state.toss.choice == "bat":
+            assert state.toss.batting_first == chose
+        else:
+            assert state.toss.batting_first == engine.other(chose)
+
+
+def test_cannot_start_before_choosing():
+    state = engine.new_match("IND")
+    engine.do_toss(state, "heads", random.Random(3))
+    if state.phase == "elect":
+        with pytest.raises(engine.RuleError):
+            engine.start_match(state)  # must elect first
+    else:
+        with pytest.raises(engine.RuleError):
+            engine.elect_toss(state, "bat")  # the computer already chose
 
 
 @pytest.mark.parametrize("seed", range(200))
@@ -64,6 +103,7 @@ def test_wide_does_not_count_as_a_ball():
     rng = random.Random(1)
     state = engine.new_match("IND")
     engine.do_toss(state, "heads", rng)
+    settle_toss(state)
     inn = state.innings[0]
     state.pending_delivery = engine.Delivery(
         kind="wide", line="wide_off", length="good", speed_kph=140, free_hit=False
@@ -80,6 +120,7 @@ def test_no_wicket_on_a_free_hit():
         rng = random.Random(seed)
         state = engine.new_match("IND")
         engine.do_toss(state, "heads", rng)
+        settle_toss(state)
         state.free_hit = True
         state.pending_delivery = engine.Delivery(
             kind="legal", line="stumps", length="good", speed_kph=140, free_hit=True
@@ -94,6 +135,7 @@ def test_perfect_timing_finds_the_boundary():
         state = engine.new_match("IND")
         state.toss = None
         engine.do_toss(state, "heads", rng)
+        settle_toss(state)
         if state.innings[0].batting != "IND":
             continue  # the computer is batting, so our timing is ignored
         state.pending_delivery = engine.Delivery(

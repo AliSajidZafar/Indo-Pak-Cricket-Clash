@@ -12,7 +12,7 @@ import Scorecard from "@/components/Scorecard";
 import Stadium, { type StadiumHandle } from "@/components/Stadium";
 import { ApiError, api } from "@/lib/api";
 import { TEAM_STYLE, currentInnings } from "@/lib/cricket";
-import type { CoinSide, Direction, MatchState, TeamCode } from "@/types/match";
+import type { CoinSide, Direction, MatchState, TeamCode, TossChoice } from "@/types/match";
 
 const AIMS: { value: Direction; label: string; key: string }[] = [
   { value: "leg", label: "Leg side", key: "←" },
@@ -286,6 +286,8 @@ export default function Page() {
           userBatting={!!userBatting}
           onBowl={playBall}
           onToss={(c) => run(() => api.toss(match.id, c)).then(setMatch)}
+          onElect={(d) => run(() => api.elect(match.id, d)).then(setMatch)}
+          onStartMatch={() => run(() => api.startMatch(match.id)).then(setMatch)}
           onNextInnings={() => run(() => api.nextInnings(match.id)).then(setMatch)}
           onPlayAgain={() => setMatch(null)}
         />
@@ -307,31 +309,24 @@ function Controls(props: {
   busy: boolean;
   userBatting: boolean;
   onBowl: () => void;
-  onToss: (c: CoinSide) => void;
+  onToss: (c: CoinSide) => Promise<unknown> | void;
+  onElect: (d: TossChoice) => void;
+  onStartMatch: () => void;
   onNextInnings: () => void;
   onPlayAgain: () => void;
 }) {
   const { match, aim, setAim, busy, userBatting, onBowl } = props;
 
-  if (match.phase === "toss") {
+  if (match.phase === "toss" || match.phase === "elect" || match.phase === "toss_result") {
     return (
-      <Panel>
-        <p className="text-sm text-white/80">
-          Call the toss — the winner bats first, the loser chases.
-        </p>
-        <div className="flex gap-3">
-          {(["heads", "tails"] as CoinSide[]).map((c) => (
-            <button
-              key={c}
-              disabled={busy}
-              onClick={() => props.onToss(c)}
-              className="flex-1 rounded-lg bg-white/10 px-4 py-3 font-semibold capitalize text-white transition hover:bg-white/20 disabled:opacity-50"
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-      </Panel>
+      <TossPanel
+        key={match.id}
+        match={match}
+        busy={busy}
+        onToss={props.onToss}
+        onElect={props.onElect}
+        onStartMatch={props.onStartMatch}
+      />
     );
   }
 
@@ -445,6 +440,129 @@ function Panel({ children }: { children: React.ReactNode }) {
   );
 }
 
+// A spinning gold coin; shows the result face once it settles.
+function Coin({ spinning, face }: { spinning: boolean; face?: string }) {
+  return (
+    <div
+      className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br from-amber-200 via-yellow-400 to-amber-600 text-2xl font-black text-amber-900 shadow-[0_6px_16px_rgba(0,0,0,0.4)] ring-2 ring-amber-200/60"
+      style={spinning ? { animation: "coinflip 0.45s linear infinite" } : undefined}
+    >
+      {spinning ? "" : (face ?? "🪙")}
+    </div>
+  );
+}
+
+/** The official toss: call the coin, then the winner elects to bat or bowl. */
+function TossPanel({
+  match,
+  busy,
+  onToss,
+  onElect,
+  onStartMatch,
+}: {
+  match: MatchState;
+  busy: boolean;
+  onToss: (c: CoinSide) => Promise<unknown> | void;
+  onElect: (d: TossChoice) => void;
+  onStartMatch: () => void;
+}) {
+  const [flipping, setFlipping] = useState(false);
+  const [called, setCalled] = useState<CoinSide | null>(null);
+  const toss = match.toss;
+  const user = match.user_team;
+  const nameOf = (c: TeamCode) => match.teams[c].name;
+  const faceOf = (c: CoinSide) => (c === "heads" ? "H" : "T");
+
+  // Spin the coin until the toss resolves (phase changes) or the call fails.
+  const call = (c: CoinSide) => {
+    setCalled(c);
+    setFlipping(true);
+    Promise.resolve(onToss(c)).finally(() => setFlipping(false));
+  };
+
+  if (match.phase === "toss") {
+    return (
+      <Panel>
+        <Coin spinning={flipping} face={called ? faceOf(called) : undefined} />
+        {flipping ? (
+          <p className="text-center text-sm font-medium text-white/80">Flipping the coin…</p>
+        ) : (
+          <>
+            <p className="text-center text-sm text-white/80">Flip the coin — call it in the air.</p>
+            <div className="flex gap-3">
+              {(["heads", "tails"] as CoinSide[]).map((c) => (
+                <button
+                  key={c}
+                  disabled={busy}
+                  onClick={() => call(c)}
+                  className="flex-1 rounded-lg bg-white/10 px-4 py-3 font-semibold capitalize text-white transition hover:bg-white/20 disabled:opacity-50"
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </Panel>
+    );
+  }
+
+  if (match.phase === "elect" && toss) {
+    return (
+      <Panel>
+        <Coin spinning={false} face={faceOf(toss.outcome)} />
+        <p className="text-center text-sm font-semibold text-amber-300">
+          It&apos;s {toss.outcome} — you won the toss! 🎉
+        </p>
+        <p className="text-center text-xs text-white/60">Will you bat or bowl?</p>
+        <div className="flex gap-3">
+          <button
+            disabled={busy}
+            onClick={() => onElect("bat")}
+            className="flex-1 rounded-lg bg-amber-500 px-4 py-3 font-bold text-black transition hover:bg-amber-400 disabled:opacity-50"
+          >
+            🏏 Bat
+          </button>
+          <button
+            disabled={busy}
+            onClick={() => onElect("bowl")}
+            className="flex-1 rounded-lg bg-blue-600 px-4 py-3 font-bold text-white transition hover:bg-blue-500 disabled:opacity-50"
+          >
+            ⚾ Bowl
+          </button>
+        </div>
+      </Panel>
+    );
+  }
+
+  if (match.phase === "toss_result" && toss && toss.batting_first) {
+    const youBatFirst = toss.batting_first === user;
+    return (
+      <Panel>
+        <Coin spinning={false} face={faceOf(toss.outcome)} />
+        <p className="text-center text-sm font-semibold text-white">
+          {nameOf(toss.winner)} won the toss and chose to{" "}
+          <span className="text-amber-300">{toss.choice === "bat" ? "bat" : "bowl"}</span>.
+        </p>
+        <p className="text-center text-xs text-white/60">
+          {youBatFirst
+            ? "You bat first — go set a target."
+            : `${nameOf(toss.batting_first)} bats first — you'll bowl, then chase.`}
+        </p>
+        <button
+          disabled={busy}
+          onClick={onStartMatch}
+          className="w-full rounded-lg bg-blue-600 px-4 py-3 font-bold text-white shadow-lg transition hover:bg-blue-500 disabled:opacity-50"
+        >
+          Start match →
+        </button>
+      </Panel>
+    );
+  }
+
+  return null;
+}
+
 function StartScreen({ onStart, error }: { onStart: (t: TeamCode) => void; error: string | null }) {
   const [view, setView] = useState<"menu" | "team">("menu");
   return (
@@ -461,7 +579,7 @@ function StartScreen({ onStart, error }: { onStart: (t: TeamCode) => void; error
         <div className="animate-[pop_0.5s_ease-out]">
           <div className="mb-2 flex items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-amber-300/90">
             <span className="h-px w-6 bg-amber-300/50" />
-            The Arch-Rivals · 5 Overs
+            The Arch-Rivals
             <span className="h-px w-6 bg-amber-300/50" />
           </div>
           <h1 className="text-4xl font-black leading-none tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] sm:text-6xl">
@@ -471,7 +589,7 @@ function StartScreen({ onStart, error }: { onStart: (t: TeamCode) => void; error
             </span>
           </h1>
           <p className="mt-3 text-sm text-white/70 sm:text-base">
-            India vs Pakistan · 5 overs a side · winner of the toss bats first
+            India vs Pakistan · 5 overs a side · win the toss, choose to bat or bowl
           </p>
         </div>
 

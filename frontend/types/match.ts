@@ -1,7 +1,8 @@
 // Mirrors backend/app/models.py. Keep the two in sync.
 
 export type TeamCode = "IND" | "PAK";
-export type Phase = "toss" | "innings1" | "innings_break" | "innings2" | "finished";
+export type Phase = "toss" | "elect" | "toss_result" | "innings1" | "innings_break" | "innings2" | "finished";
+export type TossChoice = "bat" | "bowl";
 export type DeliveryKind = "legal" | "wide" | "no_ball";
 export type Line = "wide_leg" | "leg" | "stumps" | "off" | "wide_off";
 export type Length = "yorker" | "full" | "good" | "short";
@@ -75,7 +76,8 @@ export interface Toss {
   call: CoinSide;
   outcome: CoinSide;
   winner: TeamCode;
-  batting_first: TeamCode;
+  choice: TossChoice | null;
+  batting_first: TeamCode | null;
 }
 
 export interface Delivery {

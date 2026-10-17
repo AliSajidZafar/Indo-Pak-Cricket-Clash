@@ -33,3 +33,13 @@ body {
     opacity: 1;
   }
 }
+
+/* Spinning coin for the toss. */
+@keyframes coinflip {
+  from {
+    transform: rotateX(0deg);
+  }
+  to {
+    transform: rotateX(360deg);
+  }
+}

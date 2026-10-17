@@ -8,7 +8,10 @@ from typing import Literal
 from pydantic import BaseModel, Field, computed_field
 
 TeamCode = Literal["IND", "PAK"]
-Phase = Literal["toss", "innings1", "innings_break", "innings2", "finished"]
+# toss: call the coin · elect: toss winner (the user) picks bat/bowl ·
+# toss_result: the computer won and has chosen, waiting for the user to start.
+Phase = Literal["toss", "elect", "toss_result", "innings1", "innings_break", "innings2", "finished"]
+TossChoice = Literal["bat", "bowl"]
 DeliveryKind = Literal["legal", "wide", "no_ball"]
 Line = Literal["wide_leg", "leg", "stumps", "off", "wide_off"]
 Length = Literal["yorker", "full", "good", "short"]
@@ -87,7 +90,10 @@ class Toss(BaseModel):
     call: CoinSide
     outcome: CoinSide
     winner: TeamCode
-    batting_first: TeamCode
+    # Set once the winner has elected (immediately for the computer; after the
+    # user picks, for the user).
+    choice: TossChoice | None = None
+    batting_first: TeamCode | None = None
 
 
 class Delivery(BaseModel):
@@ -157,6 +163,10 @@ class NewMatchRequest(BaseModel):
 
 class TossRequest(BaseModel):
     call: CoinSide
+
+
+class ElectRequest(BaseModel):
+    decision: TossChoice
 
 
 class PlayRequest(BaseModel):

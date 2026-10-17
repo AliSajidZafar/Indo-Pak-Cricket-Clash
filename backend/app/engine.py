@@ -50,13 +50,49 @@ def new_match(user_team: TeamCode) -> MatchState:
 
 
 def do_toss(state: MatchState, call: CoinSide, rng: random.Random) -> None:
+    """Flip the coin. If the user wins they then elect (bat/bowl); if the computer
+    wins it elects straight away and we wait for the user to start the match."""
     if state.phase != "toss":
         raise RuleError("The toss has already happened.")
     outcome: CoinSide = rng.choice(["heads", "tails"])
     winner = state.user_team if outcome == call else other(state.user_team)
-    # Agreed rule for this game: the toss winner always bats first.
-    state.toss = Toss(call=call, outcome=outcome, winner=winner, batting_first=winner)
-    _start_innings(state, batting=winner)
+    state.toss = Toss(call=call, outcome=outcome, winner=winner)
+    if winner == state.user_team:
+        state.phase = "elect"  # the user chooses next, via elect_toss
+    else:
+        _apply_choice(state, winner, _computer_choice(rng))
+        state.phase = "toss_result"  # the user reads the result, then starts
+
+
+def _computer_choice(rng: random.Random) -> str:
+    """How the computer elects after winning the toss (a slight lean to batting)."""
+    return "bat" if rng.random() < 0.55 else "bowl"
+
+
+def _apply_choice(state: MatchState, winner: TeamCode, choice: str) -> None:
+    assert state.toss is not None
+    state.toss.choice = choice  # type: ignore[assignment]
+    state.toss.batting_first = winner if choice == "bat" else other(winner)
+
+
+def elect_toss(state: MatchState, decision: str) -> None:
+    """The user (having won the toss) chooses to bat or bowl; the match starts."""
+    if state.phase != "elect" or state.toss is None:
+        raise RuleError("There is no toss to decide right now.")
+    _apply_choice(state, state.toss.winner, decision)
+    _begin_first_innings(state)
+
+
+def start_match(state: MatchState) -> None:
+    """Begin play after the computer has won the toss and elected."""
+    if state.phase != "toss_result":
+        raise RuleError("The match is not ready to start.")
+    _begin_first_innings(state)
+
+
+def _begin_first_innings(state: MatchState) -> None:
+    assert state.toss is not None and state.toss.batting_first is not None
+    _start_innings(state, batting=state.toss.batting_first)
     state.phase = "innings1"
 
 

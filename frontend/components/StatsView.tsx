@@ -11,6 +11,20 @@ const fmt = (v: number | string | null, dp = 2) =>
 
 const TEAM_NAME: Record<TeamCode, string> = { IND: "India", PAK: "Pakistan" };
 
+// The best milestone a batter has reached, from their highest score.
+function milestone(hs: number): { label: string; cls: string } | null {
+  if (hs >= 100) return { label: "100", cls: "bg-amber-400 text-black" };
+  if (hs >= 50) return { label: "50", cls: "bg-amber-500/30 text-amber-200 ring-1 ring-amber-400/50" };
+  if (hs >= 30) return { label: "30", cls: "bg-blue-500/25 text-blue-200 ring-1 ring-blue-400/40" };
+  return null;
+}
+
+function MilestoneBadge({ hs }: { hs: number }) {
+  const m = milestone(hs);
+  if (!m) return <span className="text-white/25">—</span>;
+  return <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-bold ${m.cls}`}>{m.label}</span>;
+}
+
 function TeamCell({ team }: { team: TeamCode }) {
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -48,13 +62,12 @@ function TeamCard({ t }: { t: TeamStat }) {
       <div className="mb-2 flex items-center gap-2">
         <Flag team={t.team} className="h-6 w-9" />
         <span className="font-bold text-white">{TEAM_NAME[t.team]}</span>
-        <span className="ml-auto font-mono text-sm text-white/80">{t.wins} wins</span>
+        <span className="ml-auto font-mono text-sm text-white/80">
+          {t.wins} {t.wins === 1 ? "win" : "wins"}
+        </span>
       </div>
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid grid-cols-3 gap-1.5">
         <Stat label="Runs" value={t.runs} />
-        <Stat label="30s" value={t.thirties} />
-        <Stat label="50s" value={t.fifties} />
-        <Stat label="100s" value={t.hundreds} />
         <Stat label="Fours" value={t.fours} />
         <Stat label="Sixes" value={t.sixes} />
       </div>
@@ -113,6 +126,7 @@ export default function StatsView({ data }: { data: StatsResponse }) {
               <Th right>Inns</Th>
               <Th right>Runs</Th>
               <Th right>HS</Th>
+              <Th right>50/100</Th>
               <Th right>Avg</Th>
               <Th right>SR</Th>
             </tr>
@@ -127,6 +141,9 @@ export default function StatsView({ data }: { data: StatsResponse }) {
                 <Td right>{b.innings}</Td>
                 <Td right>{b.runs}</Td>
                 <Td right>{b.high_score}</Td>
+                <Td right>
+                  <MilestoneBadge hs={b.high_score} />
+                </Td>
                 <Td right>{fmt(b.average)}</Td>
                 <Td right>{fmt(b.strike_rate)}</Td>
               </tr>

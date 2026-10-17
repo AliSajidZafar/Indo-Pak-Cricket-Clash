@@ -1,4 +1,4 @@
-import type { CoinSide, Direction, MatchState, TeamCode } from "@/types/match";
+import type { CoinSide, Direction, MatchState, TeamCode, TossChoice } from "@/types/match";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -27,6 +27,8 @@ async function call(path: string, body?: unknown): Promise<MatchState> {
 export const api = {
   createMatch: (userTeam: TeamCode) => call("", { user_team: userTeam }),
   toss: (id: string, coin: CoinSide) => call(`/${id}/toss`, { call: coin }),
+  elect: (id: string, decision: TossChoice) => call(`/${id}/elect`, { decision }),
+  startMatch: (id: string) => call(`/${id}/start`),
   delivery: (id: string) => call(`/${id}/delivery`),
   play: (id: string, timingMs: number | null, direction: Direction) =>
     call(`/${id}/play`, { timing_ms: timingMs, direction }),
